@@ -1,0 +1,37 @@
+# Ajedrez — ajedrez minimalista y offline para KOReader
+
+Plugin para KOReader (probado en lógica; pensado para Kobo Libra Colour, ARM 32-bit).
+
+## Qué hace
+- **Inicio**: barra de título con menú ☰ a la izquierda y ✕ a la derecha, y solo dos opciones: *Jugar vs IA* y *Puzzles*.
+- **Partida / puzzle**: solo el tablero (y el reloj si la partida es con tiempo).
+  - Tocar el borde superior → muestra/oculta la barra (☰ y ✕); si no la tocas, se oculta sola a los 5 s.
+  - Deslizar hacia abajo desde el borde superior → menú de KOReader.
+- **IA adaptativa**: tu nivel se estima con un modelo bayesiano (escala Lichess). Tras 5–10 partidas queda definido y sigue ajustándose; la IA juega siempre a tu nivel estimado. También se puede fijar un Elo (menú ☰ → Dificultad).
+- **Puzzles offline** de Lichess (CC0), con rating propio de puzzles; cada puzzle se elige cerca de tu rating.
+- Reloj opcional (3+2, 10+0, 15+10, 30+0). La partida en curso se guarda y se puede continuar.
+
+## Instalación
+Copia la carpeta `ajedrez.koplugin` a `koreader/plugins/` y reinicia KOReader. Abre *Menú → Herramientas → Ajedrez* (o asigna el gesto "Ajedrez" en Ajustes de gestos).
+
+## Cómo funciona la fuerza de la IA (`ajedrez/strength.lua`)
+Un motor a plena fuerza se debilita como lo haría una persona: (1) busca menos nodos, (2) mira menos jugadas candidatas (MultiPV) y (3) elige entre ellas con probabilidad decreciente según los centipeones que pierde, con una temperatura sacada de la pérdida media (ACPL) típica de cada rating en Lichess. Además hay un tope de pérdida por jugada (`Strength.cap_for`): a ~1400 la IA puede cometer errores pequeños, pero nunca regala una pieza ni la dama; solo los niveles muy bajos pueden hacerlo. **La tabla de anclas se fijó con datos publicados y no está medida en un Kobo**: si la IA se siente demasiado fuerte/débil, ajusta `Strength.ANCHORS`. Como tu nivel se estima contra el Elo nominal de la IA, un sesgo de la tabla se traslada a tu número.
+
+## Motor
+La IA es siempre Stockfish; no hay motor de respaldo. Incluye Stockfish 11 para ARM (`bin/stockfish-armhf`, GPL-3). A los niveles que usa la IA (cientos a decenas de miles de nodos) la diferencia con versiones nuevas es pequeña, así que se mantiene el 11. Si el motor no arranca, Ajedrez lo reinicia una vez (la segunda desde una copia en `/tmp`, por si la carpeta no permite ejecutar) y, si sigue fallando, muestra el motivo exacto y un botón *Reintentar*; la partida espera. Opcionalmente puedes usar otro binario copiándolo como `koreader/data/ajedrez/stockfish` (ver `tools/build_stockfish_kobo.sh`, Stockfish 19 = `sf_19`, sin probar). Corre con prioridad mínima (`nice 19`), 1 hilo, 16 MB de hash, solo mientras piensa la IA; máximo 8 s por jugada (`AI.MAX_MOVE_MS`).
+
+## Tablero a color
+Por defecto usa los colores de Lichess (marrón, con jugadas resaltadas en amarillo/verde) cuando KOReader tiene el color activado; si no, blanco y negro. Cámbialo en ☰ → *Colores del tablero* (Lichess, verde, azul, blanco y negro). En el Libra Colour, activa el color de KOReader en los ajustes de pantalla; si está desactivado, todo se ve en gris aunque el tema sea de color.
+
+## Puzzles
+Dentro del plugin van 50.000 puzzles (`data/puzzles.txt`, 4,4 MB). Para toda la base de Lichess (~5 millones):
+```
+python3 tools/build_puzzle_pack.py lichess_db_puzzle.csv.zst puzzles.txt
+```
+y copia `puzzles.txt` a `koreader/data/ajedrez/puzzles.txt`. Se lee con búsqueda binaria directamente del archivo, sin cargarlo en memoria.
+
+## Pruebas (en un PC, con Lua y Python)
+`LUA=lua sh tests/run_ai.sh`, `LUA=lua sh tests/run_ui.sh` y `lua tests/test_pure.lua`.
+
+## Licencias
+GPL-3.0. Reglas de ajedrez: de Ink Knight (Beater Studios, GPL-3.0); Stockfish 11: GPL-3.0; piezas Cburnett/Merida (GPL-2+), Chessnut (Apache-2.0); puzzles: base de Lichess, CC0.
