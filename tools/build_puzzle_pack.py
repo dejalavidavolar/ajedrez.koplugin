@@ -4,7 +4,7 @@
   1. Download https://database.lichess.org/lichess_db_puzzle.csv.zst  (about 250 MB, ~5 million puzzles)
   2. python3 tools/build_puzzle_pack.py lichess_db_puzzle.csv.zst puzzles.txt
      (needs `zstd` installed for .zst files; a plain .csv works without it, and "-" reads stdin)
-  3. Copy puzzles.txt to  <koreader>/data/ajedrez/puzzles.txt  on the e-reader (it survives plugin updates
+  3. Copy puzzles.txt AND puzzles.txt.idx to  <koreader>/data/ajedrez/  on the e-reader (it survives plugin updates
      and is used instead of the small pack that comes inside the plugin).
 
 Options: --min-popularity N (default 80, Lichess's own "good puzzle" signal), --max-deviation N (default 110),
@@ -44,10 +44,21 @@ def main():
     if a.max and len(rows) > a.max:
         step = len(rows) / a.max
         rows = [rows[int(i * step)] for i in range(a.max)]
+    # Besides the pack, <output>.idx: the byte offset of every 1000th puzzle, so the plugin finds the number
+    # (position) of a puzzle without reading the whole file. Copy both files together.
+    offsets, at = [], 0
     with open(a.output, "w", encoding="utf-8", newline="\n") as o:
-        o.write("#caissa-puzzles v1 count=%d\n" % len(rows))
-        for rating, pid, fen, moves, themes in rows:
-            o.write("%s|%s|%s|%d|%s\n" % (pid, fen, moves, rating, themes) if themes else "%s|%s|%s|%d\n" % (pid, fen, moves, rating))
+        header = "#caissa-puzzles v1 count=%d\n" % len(rows)
+        o.write(header)
+        at = len(header.encode("utf-8"))
+        for i, (rating, pid, fen, moves, themes) in enumerate(rows):
+            line = "%s|%s|%s|%d|%s\n" % (pid, fen, moves, rating, themes) if themes else "%s|%s|%s|%d\n" % (pid, fen, moves, rating)
+            if i % 1000 == 0:
+                offsets.append(at)
+            o.write(line)
+            at += len(line.encode("utf-8"))
+    with open(a.output + ".idx", "w", newline="\n") as o:
+        o.write("\n".join(str(x) for x in offsets) + "\n")
     print("%d puzzles, ratings %d-%d" % (len(rows), rows[0][0] if rows else 0, rows[-1][0] if rows else 0))
 
 

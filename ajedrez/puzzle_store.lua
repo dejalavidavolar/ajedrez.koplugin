@@ -44,7 +44,17 @@ function Store.open(path)
     end
     local min = f:seek("cur")
     local size = f:seek("end")
-    return setmetatable({ f = f, path = path, count = tonumber(count), min = min, size = size }, Store)
+    local self = setmetatable({ f = f, path = path, count = tonumber(count), min = min, size = size }, Store)
+    -- <pack>.idx (made by tools/build_puzzle_pack.py): the byte offset of every INDEX_STEP-th puzzle
+    local idx = io.open(path .. ".idx", "rb")
+    if idx then
+        self.index = {}
+        for line in idx:lines() do
+            self.index[#self.index + 1] = tonumber(line)
+        end
+        idx:close()
+    end
+    return self
 end
 
 function Store:close()
@@ -77,8 +87,24 @@ function Store:first_at(target)
 end
 
 -- Position of the puzzle that starts at byte offset pos in the file (1 for the first one): the lines before it + 1.
+Store.INDEX_STEP = 1000
+
 function Store:number_at(pos)
     local f, n, at = self.f, 1, self.min
+    local index = self.index
+    if index and #index > 0 then
+        -- the last indexed puzzle that starts at or before pos; only the lines after it are counted
+        local lo, hi = 1, #index
+        while lo < hi do
+            local mid = math.floor((lo + hi + 1) / 2)
+            if index[mid] <= pos then
+                lo = mid
+            else
+                hi = mid - 1
+            end
+        end
+        n, at = 1 + (lo - 1) * Store.INDEX_STEP, index[lo]
+    end
     f:seek("set", at)
     while at < pos do
         local chunk = f:read(math.min(65536, pos - at))
